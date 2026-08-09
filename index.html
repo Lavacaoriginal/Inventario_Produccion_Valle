@@ -1190,6 +1190,8 @@ function mkReal(r){
     _debTimers[r.id]=null;
     saveRow(r,'real');
     setTimeout(()=>{ r._localEdit=false; },800);
+    // Si se acaba de digitar un valor y no hay sesión admin, bloquear ya mismo
+    if(!isNaN(num) && !isAdmin()) buildProd();
   });
   td.appendChild(inp); return td;
 }

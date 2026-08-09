@@ -692,6 +692,24 @@ tr.dragging{opacity:.4;}
   </div>
 </div>
 
+<!-- MODAL CLAVE (reemplaza prompt() nativo para ocultar el texto digitado) -->
+<div class="overlay" id="pwPromptOverlay">
+  <div class="modal modal-sm">
+    <button class="modal-x" onclick="_pwPromptCancel()">✕</button>
+    <div class="modal-title" id="pwPromptTitle">🔒 Clave de acceso</div>
+    <div class="modal-field" style="margin-bottom:14px;">
+      <label>Clave</label>
+      <input type="password" id="pwPromptInput" placeholder="••••••••"
+        style="font-size:.9rem;padding:10px 12px;"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-close" onclick="_pwPromptSubmit()">Ingresar</button>
+      <button class="btn btn-ghost" onclick="_pwPromptCancel()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ SUPABASE CONFIG ══
 const SB_URL  = 'https://soonmnwthafyivbkypef.supabase.co';
@@ -724,7 +742,7 @@ async function sbInsert(table, data){
 }
 
 // ══ CONFIG APP ══
-const PASS_ADMIN    = '150884'; // ← cambia esta clave de administrador
+const PASS_ADMIN    = 'ilvovalle26'; // ← clave de administrador
 const PASS_INVITADO = '123456'; // ← clave para invitados (trabajadores)
 const MAX_HIST   = 15;
 const SESSION_MS = 5*60*1000;
@@ -910,9 +928,9 @@ function buildProd(){
       const el=document.getElementById('vname-'+r.id);if(el)el.textContent=this.value||'—';
       debSave(r);
     });
-    inN.addEventListener('click',function(){
+    inN.addEventListener('click',async function(){
       if(this.readOnly&&!isAdmin()){
-        if(requestAdmin()){buildProd();}
+        if(await requestAdmin()){buildProd();}
       }
     });
     tdN.appendChild(sp); tdN.appendChild(inN); tr.appendChild(tdN);
@@ -1159,8 +1177,8 @@ function mkReal(r){
     td.style.cursor='pointer';
     td.title='Valor ya registrado — solo el administrador puede editarlo o borrarlo';
     td.innerHTML='<span style="display:inline-flex;align-items:center;gap:4px;justify-content:center;">🔒 '+val+'</span>';
-    td.addEventListener('click',function(){
-      if(requestAdmin()){ buildProd(); }
+    td.addEventListener('click',async function(){
+      if(await requestAdmin()){ buildProd(); }
     });
     return td;
   }
@@ -1256,10 +1274,35 @@ function isSessionActive(){ return Date.now()<sessionExpiry && sessionLevel!==''
 function isAdmin(){         return Date.now()<sessionExpiry && sessionLevel==='admin'; }
 function isInvitado(){      return Date.now()<sessionExpiry && (sessionLevel==='invitado'||sessionLevel==='admin'); }
 
+// ══ MODAL DE CLAVE (con input oculto tipo password) ══
+let _pwResolve=null;
+function passwordPrompt(title){
+  return new Promise(resolve=>{
+    _pwResolve=resolve;
+    document.getElementById('pwPromptTitle').textContent=title;
+    const inp=document.getElementById('pwPromptInput');
+    inp.value='';
+    document.getElementById('pwPromptOverlay').classList.add('open');
+    setTimeout(()=>inp.focus(),80);
+  });
+}
+function _pwPromptSubmit(){
+  const v=document.getElementById('pwPromptInput').value;
+  document.getElementById('pwPromptOverlay').classList.remove('open');
+  if(_pwResolve){ const r=_pwResolve; _pwResolve=null; r(v===''?null:v); }
+}
+function _pwPromptCancel(){
+  document.getElementById('pwPromptOverlay').classList.remove('open');
+  if(_pwResolve){ const r=_pwResolve; _pwResolve=null; r(null); }
+}
+document.getElementById('pwPromptInput').addEventListener('keydown',function(e){
+  if(e.key==='Enter'){ e.preventDefault(); _pwPromptSubmit(); }
+});
+
 // Pedir sesión de cualquier nivel (invitado o admin)
-function requestSession(){
+async function requestSession(){
   if(isSessionActive()) return true;
-  const v=prompt('🔒 Ingresa tu clave de acceso:');
+  const v=await passwordPrompt('🔒 Ingresa tu clave de acceso');
   if(v===null) return false;
   if(v===PASS_ADMIN){
     sessionExpiry=Date.now()+SESSION_MS;
@@ -1280,9 +1323,9 @@ function requestSession(){
 }
 
 // Pedir sesión solo de admin
-function requestAdmin(){
+async function requestAdmin(){
   if(isAdmin()) return true;
-  const v=prompt('🔒 Clave de administrador:');
+  const v=await passwordPrompt('🔒 Clave de administrador');
   if(v===null) return false;
   if(v===PASS_ADMIN){
     sessionExpiry=Date.now()+SESSION_MS;
@@ -1319,7 +1362,7 @@ function updateAdminBtn(){
 }
 
 // Botón visible para iniciar/cerrar sesión de administrador
-function toggleAdminLogin(){
+async function toggleAdminLogin(){
   if(isAdmin()){
     if(confirm('¿Cerrar sesión de administrador?')){
       sessionExpiry=0; sessionLevel='';
@@ -1327,12 +1370,12 @@ function toggleAdminLogin(){
     }
     return;
   }
-  if(requestAdmin()){ buildProd(); }
+  if(await requestAdmin()){ buildProd(); }
 }
 
 // ══ CRUD ══
 async function addRow(){
-  if(!requestAdmin())return;
+  if(!(await requestAdmin()))return;
   const r={id:uid(),name:'',ant:null,real:null,retorno:null,dev:null,fin:null,
     v1m:null,v1t:null,v2m:null,v2t:null,v3m:null,v3t:null,v4m:null,v4t:null,armenia:null,xmayor:null,despachos:{},orden:rows.length};
   rows.push(r);
@@ -1342,7 +1385,7 @@ async function addRow(){
 }
 
 async function delRow(id){
-  if(!requestAdmin())return;
+  if(!(await requestAdmin()))return;
   const r=rows.find(x=>x.id===id);if(!r)return;
   const idx=rows.indexOf(r);
   // confirm() reemplazado — en móvil puede no funcionar bien
@@ -1379,7 +1422,7 @@ function openTrash(){
 }
 
 async function restoreFromTrash(i){
-  if(!requestAdmin()) return;
+  if(!(await requestAdmin())) return;
   const r={...trash[i]};
   const pos=Math.min(r._pos,rows.length);
   delete r._pos;delete r._when;delete r._date;delete r._id;
@@ -1393,7 +1436,7 @@ async function restoreFromTrash(i){
 }
 
 async function emptyTrash(){
-  if(!requestAdmin()) return;
+  if(!(await requestAdmin())) return;
   if(!trash.length)return;
   // Confirmación implícita — ya requiere requestAdmin()
   trash=[];
@@ -1403,7 +1446,7 @@ async function emptyTrash(){
 
 // ══ CERRAR DÍA ══
 async function cerrarDia(){
-  if(!requestSession())return;
+  if(!(await requestSession()))return;
   if(window._cerrando){ alert('Ya hay un cierre en proceso, espera.'); return; }
   rows.forEach(calcRow);
   if(!rows.some(r=>r.fin!==null)){alert('No hay Inventario Final registrado.');return;}
@@ -1611,7 +1654,7 @@ function buildHistHTML(h){
   return hp+hv;
 }
 async function eliminarHistorial(idx){
-  if(!requestAdmin()) return;
+  if(!(await requestAdmin())) return;
   const h=hist[idx];
   // Confirmación implícita — ya requiere requestAdmin()
   try{
@@ -2117,8 +2160,8 @@ async function buscarProduccion(){
 let _editHistIdx = null;
 let _editSnap    = [];
 
-function abrirEditorHistorial(idx){
-  if(!requestAdmin()) return;
+async function abrirEditorHistorial(idx){
+  if(!(await requestAdmin())) return;
   const h = hist[idx];
   _editHistIdx = idx;
   // Clonar snapshot para editar
@@ -2256,8 +2299,8 @@ document.getElementById('encargadoInput').addEventListener('keydown', function(e
 });
 
 // ══ EDITAR ENCARGADO HISTORIAL ══
-function abrirEditarEncargado(idx){
-  if(!requestAdmin()) return;
+async function abrirEditarEncargado(idx){
+  if(!(await requestAdmin())) return;
   const h = hist[idx];
   document.getElementById('editEncargadoSub').textContent = 'Editando: '+h.label;
   document.getElementById('editEncargadoInput').value = h.encargado||'';
